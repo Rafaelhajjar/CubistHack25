@@ -1,0 +1,39 @@
+import pandas as pd
+
+df = pd.read_excel("MTA_Congestion_Relief_Zone_Vehicle_Entries")
+
+grouped = df.groupby('Detection Region')[['CRZ Entries', 'Excluded Roadway Entries']].sum().reset_index()
+
+grouped['total_entries'] = grouped['CRZ Entries'] + grouped['Excluded Roadway Entries']
+
+from geopy.geocoders import Nominatim
+from time import sleep
+
+geolocator = Nominatim(user_agent="nyc_heatmap")
+
+grouped['latitude'] = None
+grouped['longitude'] = None
+
+for i, row in grouped.iterrows():
+    try:
+        location = geolocator.geocode(f"{row['Detection Region']}, New York City")
+        if location:
+            grouped.at[i, 'latitude'] = location.latitude
+            grouped.at[i, 'longitude'] = location.longitude
+    except:
+        pass
+    sleep(1)  # avoid getting rate-limited
+    import folium
+    from folium.plugins import HeatMap
+    
+    grouped = grouped.dropna(subset=['latitude', 'longitude'])
+    
+    m = folium.Map(location=[40.7128, -74.0060], zoom_start=12)
+    
+    heat_data = grouped[['latitude', 'longitude', 'total_entries']].values.tolist()
+    
+    HeatMap(heat_data, radius=15).add_to(m)
+    
+    m.save("nyc_toll_congestion_heatmap.html")
+    print("Map saved: nyc_toll_congestion_heatmap.html")
+    

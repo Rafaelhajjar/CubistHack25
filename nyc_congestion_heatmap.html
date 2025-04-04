@@ -1,0 +1,45 @@
+# Install dependencies first (only once)
+# pip install pandas openpyxl folium geopy
+
+import pandas as pd
+import folium
+from folium.plugins import HeatMap
+from geopy.geocoders import Nominatim
+from time import sleep
+
+# Step 1: Load your Excel file
+df = pd.read_excel("your_file.xlsx")  # replace with your actual file name
+df.columns = df.columns.str.strip().str.lower()
+
+# Step 2: Initialize geocoder
+geolocator = Nominatim(user_agent="nyc_congestion_heatmap")
+
+# Step 3: Geocode 'place' column
+df['latitude'] = None
+df['longitude'] = None
+
+print("Geocoding places. This may take a few minutes...")
+
+for i, row in df.iterrows():
+    try:
+        location = geolocator.geocode(f"{row['place']}, New York City")
+        if location:
+            df.at[i, 'latitude'] = location.latitude
+            df.at[i, 'longitude'] = location.longitude
+    except:
+        pass
+    sleep(1)  # avoid getting blocked by the geocoding API
+
+# Step 4: Clean up
+df = df.dropna(subset=['latitude', 'longitude'])
+
+# Step 5: Create the map
+m = folium.Map(location=[40.7128, -74.0060], zoom_start=12)
+
+# Heatmap data (you can weight by congestion count later if needed)
+heat_data = [[row['latitude'], row['longitude']] for _, row in df.iterrows()]
+HeatMap(heat_data, radius=10).add_to(m)
+
+# Step 6: Save the map
+m.save("nyc_congestion_heatmap.html")
+print("Done! Open 'nyc_congestion_heatmap.html' in your browser to view the heatmap.")
