@@ -1,0 +1,50 @@
+/* Custom styles for Manhattan Congestion Analytics */
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+footer {
+    margin-top: auto;
+}
+
+/* Dashboard styles */
+.ratio-16x9 {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+}
+
+.ratio-16x9 iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* Make dropdowns in Dash look better */
+.Select-control {
+    border-radius: 4px !important;
+}
+
+/* Fix Dash slider styling */
+.rc-slider-track {
+    background-color: #0d6efd !important;
+}
+.rc-slider-handle {
+    border-color: #0d6efd !important;
+}
+
+/* Insights styling */
+.insights-card {
+    transition: transform 0.2s ease;
+}
+.insights-card:hover {
+    transform: translateY(-5px);
+} 

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Manhattan Congestion Analytics{% endblock %}
+
+{% block content %}
+<div class="p-5 mb-4 bg-light rounded-3">
+    <div class="container-fluid py-5">
+        <h1 class="display-5 fw-bold">Manhattan Congestion Analytics</h1>
+        <p class="col-md-8 fs-4">Analyze and visualize traffic congestion patterns in Manhattan's Congestion Relief Zone.</p>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary btn-lg">View Dashboard</a>
+    </div>
+</div>
+
+<div class="row align-items-md-stretch">
+    <div class="col-md-6">
+        <div class="h-100 p-5 text-white bg-dark rounded-3">
+            <h2>Interactive Visualizations</h2>
+            <p>Explore congestion patterns with our interactive map and charts. Filter by time, location, and vehicle type.</p>
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-light">Explore Data</a>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="h-100 p-5 bg-light border rounded-3">
+            <h2>Data-Driven Insights</h2>
+            <p>Get automated analysis and recommendations based on traffic patterns. Identify peak congestion times and areas.</p>
+            <a href="{{ url_for('main.dashboard') }}#insights" class="btn btn-outline-secondary">View Insights</a>
+        </div>
+    </div>
+</div>
+{% endblock %} 
