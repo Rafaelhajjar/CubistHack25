@@ -8,7 +8,7 @@ import dash_bootstrap_components as dbc
 from flask import Flask
 import plotly.express as px
 import plotly.graph_objects as go
-from dash_extensions.enrich import Output, Input, State, ServersideOutput
+from dash_extensions.enrich import Output, Input, State
 from datetime import datetime, timedelta
 
 # Setup Flask server and Dash app
