@@ -4,6 +4,8 @@ import numpy as np
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+# Import your SQLAlchemy models (ensure init_db.py is correct)
 from init_db import EntryPoint, VehicleClass, CongestionEntry, DailyAggregate, Base
 
 # Entry Point mapping
@@ -34,38 +36,65 @@ entry_points = {
 }
 
 def load_data():
-    """Connect to database and load data"""
-    # Define the database connection
-    db_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'app.db')
-    engine = create_engine(f'sqlite:///{db_path}')
+    """Connect to database, load CSV data, and insert it into SQLite."""
+    # 1. Define the database connection
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    db_path = os.path.join(base_dir, 'app.db')
+    engine = create_engine(f'sqlite:///{db_path}', echo=False)
     Session = sessionmaker(bind=engine)
     session = Session()
     
     try:
-        # Load the CSV data
-        print("Loading CSV data...")
+        # 2. Load the CSV data
         csv_file = 'MTA_Congestion_Relief_Zone_Vehicle_Entries__Beginning_2025_20250404.csv'
-        df = pd.read_csv(csv_file)
-        print(f"Loaded {len(df)} rows from CSV")
+        full_csv_path = os.path.join(base_dir, csv_file)
         
-        # Preprocess data
+        if not os.path.exists(full_csv_path):
+            raise FileNotFoundError(f"CSV file not found at {full_csv_path}")
+        
+        print(f"Loading CSV data from: {full_csv_path}")
+        df = pd.read_csv(full_csv_path)
+        print(f"Loaded {len(df)} rows from CSV.")
+        
+        # 3. Preprocess data
         print("Preprocessing data...")
+        
+        # Convert date/time column
+        if 'Toll 10 Minute Block' not in df.columns:
+            raise KeyError("CSV missing required column: 'Toll 10 Minute Block'")
         df['datetime'] = pd.to_datetime(df['Toll 10 Minute Block'], errors='coerce')
         df.dropna(subset=['datetime'], inplace=True)
         
+        # Convert CRZ Entries to integer
+        if 'CRZ Entries' not in df.columns:
+            raise KeyError("CSV missing required column: 'CRZ Entries'")
         df['CRZ Entries'] = pd.to_numeric(df['CRZ Entries'], errors='coerce')
         df.dropna(subset=['CRZ Entries'], inplace=True)
         df['CRZ Entries'] = df['CRZ Entries'].astype(int)
         
-        df['Excluded Roadway Entries'] = pd.to_numeric(df['Excluded Roadway Entries'], errors='coerce')
-        df['Excluded Roadway Entries'] = df['Excluded Roadway Entries'].fillna(0).astype(int)
+        # Excluded Roadway Entries (optional column)
+        if 'Excluded Roadway Entries' in df.columns:
+            df['Excluded Roadway Entries'] = pd.to_numeric(df['Excluded Roadway Entries'], errors='coerce').fillna(0).astype(int)
+        else:
+            df['Excluded Roadway Entries'] = 0
         
-        df['Detection Region'] = df['Detection Region'].str.strip()
+        # Detection Region (should exist)
+        if 'Detection Region' not in df.columns:
+            raise KeyError("CSV missing required column: 'Detection Region'")
+        df['Detection Region'] = df['Detection Region'].astype(str).str.strip()
         
-        # Populate entry points
+        # Vehicle Class (should exist)
+        if 'Vehicle Class' not in df.columns:
+            raise KeyError("CSV missing required column: 'Vehicle Class'")
+        df['Vehicle Class'] = df['Vehicle Class'].astype(str).str.strip()
+        
+        # Time Period (optional column)
+        if 'Time Period' not in df.columns:
+            df['Time Period'] = None
+        
+        # 4. Populate the `EntryPoint` table
         print("Populating entry points...")
         for name, (lat, lon) in entry_points.items():
-            # Check if entry point already exists
             existing = session.query(EntryPoint).filter_by(name=name).first()
             if not existing:
                 entry_point = EntryPoint(
@@ -76,10 +105,9 @@ def load_data():
                 )
                 session.add(entry_point)
         
-        # Populate vehicle classes
+        # 5. Populate the `VehicleClass` table
         print("Populating vehicle classes...")
         for vehicle_class in df['Vehicle Class'].unique():
-            # Check if vehicle class already exists
             existing = session.query(VehicleClass).filter_by(name=vehicle_class).first()
             if not existing:
                 vc = VehicleClass(
@@ -88,46 +116,52 @@ def load_data():
                 )
                 session.add(vc)
         
-        # Commit entry points and vehicle classes
+        # Commit these so we can map them
         session.commit()
         
-        # Create mapping dictionaries for faster lookups
+        # 6. Create fast lookup dictionaries
         entry_point_map = {ep.name: ep.id for ep in session.query(EntryPoint).all()}
         vehicle_class_map = {vc.name: vc.id for vc in session.query(VehicleClass).all()}
         
-        # Process and insert congestion entries in batches
-        print("Inserting congestion entries...")
+        # 7. Insert congestion entries in batches
+        print("Inserting congestion entries in batches...")
         batch_size = 1000
         entries_added = 0
         
         for i in range(0, len(df), batch_size):
-            batch_df = df.iloc[i:i+batch_size]
+            batch_df = df.iloc[i : i + batch_size]
             
             for _, row in batch_df.iterrows():
-                # Check if entry point and vehicle class exist in our mappings
-                if row['Detection Region'] in entry_point_map and row['Vehicle Class'] in vehicle_class_map:
-                    entry = CongestionEntry(
-                        timestamp=row['datetime'],
-                        entry_point_id=entry_point_map[row['Detection Region']],
-                        vehicle_class_id=vehicle_class_map[row['Vehicle Class']],
-                        entry_count=row['CRZ Entries'],
-                        excluded_count=row['Excluded Roadway Entries'],
-                        time_period=row['Time Period']
-                    )
-                    session.add(entry)
-                    entries_added += 1
+                ep_name = row['Detection Region']
+                vc_name = row['Vehicle Class']
+                
+                # If the region or vehicle class isn’t recognized, skip
+                if ep_name not in entry_point_map or vc_name not in vehicle_class_map:
+                    continue
+                
+                entry = CongestionEntry(
+                    timestamp=row['datetime'],
+                    entry_point_id=entry_point_map[ep_name],
+                    vehicle_class_id=vehicle_class_map[vc_name],
+                    entry_count=row['CRZ Entries'],
+                    excluded_count=row['Excluded Roadway Entries'],
+                    time_period=row['Time Period']  # might be None if not in CSV
+                )
+                session.add(entry)
+                entries_added += 1
             
-            # Commit batch
+            # Commit after each batch
             session.commit()
-            print(f"Processed {i+len(batch_df)} rows, added {entries_added} entries")
+            print(f"Processed {i + len(batch_df)} / {len(df)} rows total. Entries added so far: {entries_added}.")
         
-        print(f"Data loading complete! Added {entries_added} entries to the database.")
+        print(f"Data loading complete! Added {entries_added} congestion entries to the database.")
     
     except Exception as e:
-        print(f"Error loading data: {e}")
+        print(f"[ERROR] Loading data failed: {e}")
         session.rollback()
+    
     finally:
         session.close()
 
 if __name__ == "__main__":
-    load_data() 
+    load_data()
